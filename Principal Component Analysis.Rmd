@@ -1,0 +1,253 @@
+---
+title: "Principal Component Analysis"
+author: "Ojan Khosravifar"
+output: html_document
+---
+
+# What is PCA?
+
+Principal component analysis, or PCA, is a dimensionality reduction technique that is practically used universally to analyze large biological data sets, as well as other complex data. Put simply, PCA simplifies a complex set of data, allowing it to be more easily visualized and analyzed. It does this at the expense of accuracy, usually however, the benefits far outweigh the costs. PCA will save you time, both with understanding your data, as well as the time it takes computing various analyses.
+
+### Exploring How PCA Works
+
+Let's look at how these PCA plots are made using a simple imaginary data set involving the expression of 4 genes measured from 6 mice, split equally into two conditions. Let's call these conditions "control" and "test". 
+
+Let's look at how dimensionality reduction using PCA would work on this data set, and how it can make visualizing the inter- and intra-condition similarities and differences more intuitive.
+
+```{r setup, echo=F, message=F}
+#install.packages("scatterplot3d")
+library(scatterplot3d)
+#let's look at vector decomposition
+#4 genes x,y,z and a with read counts across 6 mice
+#gene expression for mice 1-3 is between 8-12; for mice 4-6, 1-6
+genex <- c(runif(3,6,10),runif(3,2,4))
+geney <- c(runif(3,4,6),runif(3,2,5))
+genez <- c(runif(3,8,12),runif(3,3,5))
+genea <- c(runif(3,2,4),runif(3,3,7))
+#matrix of the above
+pca <- rbind(genex,geney,genez,genea)
+colnames(pca) <- c("Test1","Test2","Test3","Control4","Control5","Control6")
+pca
+```
+
+Let's look at how we can graph this data. First let's compare genex with geney. It is clear from this graph that mice from test (1-3) and control (4-6) cluster together along genex and geney.
+
+```{r plot1, echo=F}
+color <- c(rep("red",3,sep=""), rep("blue",3,sep=""))
+number <- as.character(1:6)
+
+#let's graph genex vs geney
+plot(genex,geney, xlab="genex", ylab="geney", main="genex vs geney", pch=number, col=color)
+```
+
+Next let's compare these two genes along with genez, generating a 3D plot. Again, it is clear from this graph that mice from test (1-3) and control (4-6) cluster together.
+
+```{r plot2, echo=F}
+#now genex vs geney vs genez
+scatterplot3d(genex,geney,genez, main="genex vs geney vs genez", xlab="genex", ylab="geney", zlab="genez", cex.axis = .5, pch=number, color=color)
+```
+
+At this point we have visualized how our mice compare along three genes, however it is clear that including any further data has quickly become impractical. 
+
+In order to look at how our mice cluster across >3 genes we have to perform a "dimensionality reduction" using PCA. In this case we only have 4 genes so it may not feel necessary, however PCA also scales well. This allows us to visualize how various factors cluster across several thousand dimensions, such as the thousands of genes sequenced in RNA-seq data sets.
+
+### How Is PCA Performed?
+
+Using the <code>prcomp()</code> function we can conduct a PCA on our data set of mouse gene expression. PCA takes snapshots of our data along *n* dimensions, where *n* is the number of dimensions in our original data set, so 4. These snapshots are called principal components (PCs) and we will look at how they are generated in a minute. 
+
+For now just consider that the first PC captures the maximum amount of variance or spread in the data. Each following PC captures less of the variance than the last. In very large data sets, most of the variance is captured in the first few PCs with later PCs mostly capturing noise. In this way we can conduct more focused analyses by looking at the most variable PCs only.
+
+```{r pca}
+#conduct pca analysis using prcomp
+pcx <- prcomp(t(pca))
+
+#variance explained for each pc of pcx
+var.explained <- (pcx$sdev^2/sum(pcx$sdev^2)*100)
+
+#generate plot for pcx
+biplot(pcx, cex=c(0.7,0.6), xlab=paste("PC1: ", round(var.explained[1], 1), "%", sep=""), ylab=paste("PC2: ", round(var.explained[2], 1), "%", sep=""), main="PCA Plot")
+```
+
+### How Do You Interpret a PCA Plot?
+
+Consider the horizontal and vertical space between the points; this corresponds to the variance or spread captured by PC1 and PC2, respectively. The distance between the points represents their degree of similarity. The arrows and their length correspond to how much each gene contributes to spread along PC1 and PC2.
+
+It is important to recognize that the horizontal and vertical space is not made equal. From the labels we can see PC1 accounts for the lion's share of the variance compared to PC2. Drawing perpendicular lines from each point down to the x-axis, we can see there is very little spread within conditions; however the spread between conditions is very apparent.
+
+In complex data sets the main effect may be found along more than one PC. In this case, PC1 can be thought of as capturing the main experimental effect separating test and control.
+
+On the y-axis we can again draw perpendicular lines across to PC2 and see a large degree of vertical spread, particularly within conditions. In this case, the spread along PC2 represents sample variation.
+
+```{r screeplot}
+#generate Scree plot
+#plots variances of each PC
+labs <- paste(round(var.explained, 1), "%", sep="")
+barplot(var.explained[1:10], names.arg=labs[1:10], ylim=c(0,90), xlab="PCs", ylab="Percent Variance", main="Scree Plot for PCA", cex.names=.9)
+```
+
+This Scree plot or elbow plot shows how much variance each principal component accounts for. It can be a useful tool for determining how many PCs should be used in downstream analyses. However, these sorts of decisions should be made with great caution. A good rule of thumb is to set your cutoff around the "elbow" or bending  point of the plot. In this case that is just PC1. 
+
+Just keep in mind, including too few PCs could leave out important data leading to spurious conclusions. For this reason you should err on the side of excess. However, including too many PCs may introduce noise that could drown out real effects.
+
+At this point, all of this is getting very abstract, so let's look at how PCA actually works.
+
+### How PCA Works
+
+The previously performed PCA transformed the data from our mice into 4 PCs that represent different amounts of the original data's overall variance or spread. To keep things simple, let's visualizing how it does this in 2D for genex and geney.
+
+```{r 2D pca, echo=F, message=F}
+#run pca just on genex and geney
+pcx.2 <- prcomp(t(pca[1:2,]))
+
+#mean (mu) of each gene
+mu<- pcx.2$center
+#each PC has an eigenvector that represents how much each gene contributes to the PC
+#similar to the slope of the line across the various dimensions of the data
+#each gene's contribution for each PC is held in $rotation
+pc1 <- as.vector(pcx.2$rotation[,1])
+pc2 <- as.vector(pcx.2$rotation[,2])
+
+#plot PC1 and PC2 overlayed on centered points
+plot(genex-mu[1],geney-mu[2], xlab="genex", ylab="geney", main="genex vs geney", pch=number, col=color)
+    #dotted lines
+    abline(h=0, lwd=.1, lty=2)
+    abline(v=0, lwd=.1, lty=2)
+    #PC lines
+    abline(a=0, b=pc1[2]/pc1[1], col="blue", lwd=2)
+    abline(a=0, b=pc2[2]/pc2[1], col="blue", lwd=2)
+    #labels for PC1 and PC2
+    text(pcx.2$rotation[1,1]*-2,pcx.2$rotation[2,1]*-2,
+         pos=1, label="PC1")
+    text(pcx.2$rotation[1,2],pcx.2$rotation[2,2],
+         pos=4, label="PC2")
+```
+
+PCA starts by centering the data on 0, but otherwise this is the same graph of genex versus geney. Next, it finds the line of best fit for the data that passes through 0; this is PC1. PC2 and each corresponding PC is orthogonal to the last. This is why larger PCs capture less of the data's variance. Since this is only in 2 dimensions we only have 2 PCs and PC2 is simply perpendicular to PC1. The data projects onto PC1 and PC2 and this is what we saw earlier in the PCA Plot. 
+
+```{r 2D pca2, echo=F, message=F}
+#find PC1 and PC2 intercepts using $x and $rotation
+pc1.int <- cbind(pcx.2$rotation[1,1]*pcx.2$x[,1],
+                 pcx.2$rotation[2,1]*pcx.2$x[,1])
+pc2.int<- cbind(pcx.2$rotation[1,2]*pcx.2$x[,2],
+                pcx.2$rotation[2,2]*pcx.2$x[,2])
+#assign original coordinates-mu and intercepts to perp.points
+perp.points <- cbind(t(pca[1:2,]-mu[1:2]),pc1.int,pc2.int)
+
+#plot PC1 and PC2 with intercepts
+plot(genex-mu[1],geney-mu[2], xlab="genex", ylab="geney", main="genex vs geney", pch=number, col=color)
+    #dotted lines
+    abline(h=0, lwd=.1, lty=2)
+    abline(v=0, lwd=.1, lty=2)
+    #PC lines
+    abline(a=0, b=pc1[2]/pc1[1], col="blue", lwd=2)
+    abline(a=0, b=pc2[2]/pc2[1], col="blue", lwd=2)
+    #labels for PC1 and PC2
+    text(pcx.2$rotation[1,1]*-2,pcx.2$rotation[2,1]*-2,
+         pos=1, label="PC1")
+    text(pcx.2$rotation[1,2],pcx.2$rotation[2,2],
+         pos=4, label="PC2")
+    #PC1 and PC2 projections looped 6 times
+for(j in 1:6){
+    #orthogonal projections to PC1
+    segments(perp.points[j,1], perp.points[j,2],
+             perp.points[j,3], perp.points[j,4],
+             col="green", lwd=2, lty=2)
+    #orthogonal points for PC1
+    points(perp.points[j,3], perp.points[j,4],
+           col="black", pch=3)
+    #orthogonal projections to PC2
+    segments(perp.points[j,1], perp.points[j,2],
+             perp.points[j,5], perp.points[j,6],
+             col="green", lwd=2, lty=2)
+    #orthogonal points for PC2
+    points(perp.points[j,5], perp.points[j,6],
+           col="black", pch=3)
+}
+```
+
+So with this in mind, let's see what the PCA plot looks like for genex and geney. We can quickly see it is essentially a rotated version of the graph above. The projected points on PC1 are plotted against the projected points on PC2.
+
+```{r 2D pca3}
+#generate plot for pcx.2
+biplot(pcx.2, cex=c(0.7,0.6), xlab=paste("PC1: ", round(var.explained[1], 1), "%", sep=""), ylab=paste("PC2: ", round(var.explained[2], 1), "%", sep=""), main="2D PCA Plot")
+```
+
+Now let's look at PCA for genex, geney and genez (3D) in order to get a better sense of it's ability to simplify complex data.
+
+```{r 3D pca, echo=F, message=F}
+#run pca just on genex and geney
+pcx.3 <- prcomp(t(pca[1:3,]))
+
+#mean (mu) of each gene
+mu<- pcx.3$center
+#each PC has an eigenvector that represents how much each gene contributes to the PC
+#similar to the slope of the line across the various dimensions of the data
+#each gene's contribution for each PC is held in $rotation
+pc1 <- as.vector(pcx.3$rotation[,1])
+pc2 <- as.vector(pcx.3$rotation[,2])
+endpts <- rbind(pc1*20,pc1*-20)
+endpts2 <- rbind(pc2*20,pc2*-20)
+
+#find PC1 and PC2 intercepts using $x and $rotation
+pc1.int <- cbind(pcx.3$rotation[1,1]*pcx.3$x[,1],
+                 pcx.3$rotation[2,1]*pcx.3$x[,1],
+                 pcx.3$rotation[3,1]*pcx.3$x[,1])
+pc2.int <- cbind(pcx.3$rotation[1,2]*pcx.3$x[,2],
+                 pcx.3$rotation[2,2]*pcx.3$x[,2],
+                 pcx.3$rotation[3,2]*pcx.3$x[,2])
+#assign original coordinates-mu and intercepts to perp.points
+perp.points.3D <- cbind(t(pca[1:3,]-mu[1:3]),pc1.int,pc2.int)
+
+s3d <- scatterplot3d(genex-mu[1],geney-mu[2],genez-mu[3], main="genex vs geney vs genez", xlab="genex", ylab="geney", zlab="genez", cex.axis = .5, pch=number, color=color, angle=105)
+    #PC lines
+    s3d$points3d(endpts, type="l", col="blue", lwd=2)
+    s3d$points3d(endpts2, type="l", col="blue", lwd=2)
+    #labels for PC1 and PC2
+    text(s3d$xyz.convert(pcx.3$rotation[1,1]*-3,
+                         pcx.3$rotation[2,1]*-3,
+                         pcx.3$rotation[3,1]*-3),
+                         pos=3, label="PC1")
+    text(s3d$xyz.convert(pcx.3$rotation[1,2]*1.5,
+                         pcx.3$rotation[2,2]*1.5,
+                         pcx.3$rotation[3,2]*1.5),
+                         pos=4, label="PC2")
+    #PC1 and PC2 projections looped 6 times
+for(k in 1:6){
+    #orthogonal projections to PC1
+    s3d$points3d(x=c(perp.points.3D[k,1], perp.points.3D[k,4]),
+                 y=c(perp.points.3D[k,2], perp.points.3D[k,5]),
+                 z=c(perp.points.3D[k,3], perp.points.3D[k,6]),
+                 col="green", type="l", lwd=2, lty=2)
+    #orthogonal points to PC1
+    s3d$points3d(perp.points.3D[k,4], perp.points.3D[k,5],
+                 perp.points.3D[k,6], col="black", pch=3)
+    #orthogonal projections to PC2
+    s3d$points3d(x=c(perp.points.3D[k,1], perp.points.3D[k,7]),
+                 y=c(perp.points.3D[k,2], perp.points.3D[k,8]),
+                 z=c(perp.points.3D[k,3], perp.points.3D[k,9]),
+                 col="green", type="l", lwd=2, lty=2)
+    #orthogonal points to PC2
+    s3d$points3d(perp.points.3D[k,7], perp.points.3D[k,8],
+                 perp.points.3D[k,9], col="black", pch=3)
+}
+```
+
+Again, PC1 is the line that best fits the data and PC2 is orthogonal to PC1. The points project onto the lines and we get PC1 and PC2. In this case we have 3 genes, therefore there is also a PC3 for this data, orthogonal to PC2, with the same projections. 
+
+Let's see what the PCA plot looks like for genex, geney and genez.
+
+```{r 3D pca4}
+#generate plot for pcx.3
+biplot(pcx.3, cex=c(0.7,0.6), xlab=paste("PC1: ", round(var.explained[1], 1), "%", sep=""), ylab=paste("PC2: ", round(var.explained[2], 1), "%", sep=""), main="3D PCA Plot")
+```
+
+As we can see from this plot, PCA simplified the 3D data from genex, geney and genex, allowing us to more easily visualize our data set. 
+
+That's pretty much all there is to it!
+
+Hopefully, the next time you see a PCA plot you will recognize:
+
+* PCA simplifies high dimensional data, enabling more simple visualization and analysis
+* PC1 is the "line of best fit" through multi-dimensional data
+* The spread along the horizontal axis (PC1) is (typically) the major effect and represents the degree of similarity between conditions
+* The spread along the vertical axis (PC2) is (typically) sample variation and represents the degree of similarity within conditions
